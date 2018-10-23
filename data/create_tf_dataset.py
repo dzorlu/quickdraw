@@ -14,13 +14,17 @@ from sklearn.preprocessing import LabelEncoder
 
 import tensorflow as tf
 from tensor2tensor.data_generators import generator_utils
+from keras.preprocessing import sequence
+
+
+MAX_STROKE_COUNT = 256
 
 
 def to_example(dictionary):
   """Helper: build tf.Example from (string -> int/float/str list) dictionary."""
   features = {}
   for (k, v) in six.iteritems(dictionary):
-    if isinstance(v[0], six.integer_types) or isinstance(v[0], np.int64):
+    if isinstance(v[0], six.integer_types) or isinstance(v[0], np.int64) or isinstance(v[0], np.int32):
       features[k] = tf.train.Feature(int64_list=tf.train.Int64List(value=v))
     elif isinstance(v[0], float):
       features[k] = tf.train.Feature(float_list=tf.train.FloatList(value=v))
@@ -87,16 +91,15 @@ def generate_samples(task, file_path, is_train=True):
     x = df['drawing'].map(_map_fn).values
     if is_train:
         y = df['word'].values
-
         def _generate_samples():
             for _x, _y in zip(x, y):
                 yield {'targets': [int(_y)],
-                       'inputs': [_x.tostring()],
+                       'inputs': _x.reshape(-1),
                        'input_shape': [_x.shape[0]]}
     else:
         def _generate_samples():
             for _x in x:
-                yield {'inputs': [_x.tostring()],
+                yield {'inputs': _x.reshape(-1),
                        'input_shape': [_x.shape[0]]}
     return _generate_samples()
 
@@ -112,7 +115,6 @@ def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
 
 
 def _stack_it(raw_strokes):
-    #TODO: PAD SEQUENCES
     """preprocess the string and make 
     a standard Nx3 stroke vector"""
     # unwrap the list
@@ -121,13 +123,15 @@ def _stack_it(raw_strokes):
     # replace stroke id with 1 for continue, 2 for new stroke
     c_strokes[:, 2] = [1] + np.diff(c_strokes[:,2]).tolist()
     c_strokes[:, 2] += 1
+    c_strokes = sequence.\
+        pad_sequences(c_strokes.swapaxes(0, 1), maxlen=MAX_STROKE_COUNT, padding='post').\
+        swapaxes(0, 1).\
+        astype(np.int64)
     return c_strokes
 
 
 def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
-    #TODO: Save word encoder
     """
-    
     :param file_path: 
     :param tmp_dir: 
     :param nb_samples_for_each_class: 
