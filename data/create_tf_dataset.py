@@ -4,13 +4,14 @@ import os
 import glob
 import json
 import six
+import cv2
+from sklearn.externals import joblib
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-from PIL import Image, ImageDraw
 import tensorflow as tf
 from tensor2tensor.data_generators import generator_utils
 
@@ -100,20 +101,14 @@ def generate_samples(task, file_path, is_train=True):
     return _generate_samples()
 
 
-def _draw_it(strokes, imheight=256, imwidth=256):
-    #TODO: Memmory efficient way of doing this?
-    """infer a grayscale image from strokes"""
-    image = Image.new("P", (256, 256), color=255)
-    image_draw = ImageDraw.Draw(image)
-    for k, stroke in enumerate(strokes):
-        for i in range(len(stroke[0])-1):
-            image_draw.line([stroke[0][i],
-                             stroke[1][i],
-                             stroke[0][i+1],
-                             stroke[1][i+1]],
-                            fill=0, width=5)
-    image = image.resize((imheight, imwidth))
-    return np.array(image)/255.
+def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
+    img = np.zeros((size, size), np.uint8)
+    for t, stroke in enumerate(raw_strokes):
+        for i in range(len(stroke[0]) - 1):
+            color = 255 - min(t, 10) * 13 if time_color else 255
+            _ = cv2.line(img, (stroke[0][i], stroke[1][i]),
+                         (stroke[0][i + 1], stroke[1][i + 1]), color, lw)
+    return img
 
 
 def _stack_it(raw_strokes):
@@ -147,6 +142,9 @@ def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_r
     # cast labels onto integers
     word_encoder = LabelEncoder()
     word_encoder.fit(full_df['word'])
+    # save to file
+    filename = os.path.join(tmp_dir, 'word_encoder.pkl')
+    joblib.dump(word_encoder, filename)
     full_df['word'] = word_encoder.transform(full_df['word'].values)
     train_df, dev_df = train_test_split(full_df, test_size=1 - train_dev_ratio)
     train_path = os.path.join(tmp_dir, 'train.csv')
@@ -155,6 +153,7 @@ def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_r
     train_df.to_csv(train_path, index=False)
     dev_df.to_csv(dev_path, index=False)
     return train_path, dev_path
+
 
 def get_filenames(mode):
     if mode == 'train':
