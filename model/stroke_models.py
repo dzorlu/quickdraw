@@ -1,11 +1,14 @@
 # coding=utf-8
+import sys
+import os
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
+
 from data import read_tf_dataset, create_tf_dataset
 
 import ast
 import argparse
-import sys
 import glob
-import os
 import pandas as pd
 import numpy as np
 
@@ -23,9 +26,10 @@ NB_CHANNELS = 3
 
 
 # helper fns
-def _get_num_classes():
-    clf = joblib.load(FLAGS.model_dir)
-    return clf.classes_
+def _get_num_classes(data_dir):
+    filepath = glob.glob(os.path.join(data_dir, create_tf_dataset.ENCODER_NAME))
+    clf = joblib.load(filepath[0])
+    return len(clf.classes_)
 
 
 def top_3_accuracy(x, y): return top_k_categorical_accuracy(x, y, 3)
@@ -38,8 +42,9 @@ def model_fn(params):
     """
 
     def _create_cnn_layers(model, model_params):
-        for i in range(model_params.num_conv):
-            model.add(Conv1D(model_params.nb_conv_filters[i], ()))
+        for i in range(model_params.num_conv_layers):
+            model.add(Conv1D(model_params.nb_conv_filters[i],
+                             (model_params.conv_filter_size[i])))
             if model_params.dropout:
                 model.add(Dropout(model_params.dropout))
         return model
@@ -47,12 +52,13 @@ def model_fn(params):
     def _create_lstm_layers(model, model_params):
         for i in range(model_params.num_rnn_layers):
             return_sequences = i + 1 < model_params.num_rnn_layers
-            model.add(LSTM(model_params.num_nodes[i], return_sequences=return_sequences))
+            model.add(LSTM(model_params.num_nodes,
+                           return_sequences=return_sequences))
             if model_params.dropout:
                 model.add(Dropout(model_params.dropout))
         return model
     model = Sequential()
-    model.add(BatchNormalization(input_shape=params.num_channels))
+    model.add(BatchNormalization(input_shape=(None, params.num_channels)))
     model = _create_cnn_layers(model, params)
     model = _create_lstm_layers(model, params)
 
@@ -72,7 +78,8 @@ def get_callbacks(model_params):
                           mode="min",
                           patience=10)
 
-    tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_dir, histogram_freq=0,
+    tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_data_path,
+                                        histogram_freq=0,
                                         batch_size=model_params.batch_size,
                                         write_graph=True, write_grads=False,
                                         write_images=False, embeddings_freq=0, embeddings_layer_names=None,
@@ -97,19 +104,18 @@ def create_submission_file(model, model_params):
     print("predictions persisted..")
 
 
-def main(unused_args):
+def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
+        tmp_data_path=FLAGS.tmp_data_path,
         num_conv_layers=FLAGS.num_conv_layers,
         num_rnn_layers=FLAGS.num_rnn_layers,
         num_nodes=FLAGS.num_nodes,
         batch_size=FLAGS.batch_size,
         nb_conv_filters=ast.literal_eval(FLAGS.nb_conv_filters),
         conv_filter_size=ast.literal_eval(FLAGS.conv_filter_size),
-        num_classes=_get_num_classes(),
+        num_classes=_get_num_classes(FLAGS.data_path),
         num_channels=NB_CHANNELS,
-        learning_rate=FLAGS.learning_rate,
-        gradient_clipping_norm=FLAGS.gradient_clipping_norm,
         nb_epochs=FLAGS.nb_epochs,
         batch_norm=FLAGS.batch_norm,
         dropout=FLAGS.dropout)
@@ -119,18 +125,17 @@ def main(unused_args):
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy', top_3_accuracy])
     tf.logging.info(model.summary())
-    callbacks = get_callbacks()
+    callbacks = get_callbacks(model_params)
 
-    train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, model_params.batch_size)
-    eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, model_params.batch_size)
+    train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
+    eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
     history = model.fit_generator(generator=train_input_fn,
                                   validation_data=eval_input_fn,
                                   validation_steps=200,
                                   use_multiprocessing=True,
-                                  batch_size=model_params.batch_size,
                                   epochs=model_params.nb_epochs,
                                   # assuming we have 1MM training samples
-                                  steps_per_epoch= int(1e3 // model_params.batch_size),
+                                  steps_per_epoch=int(1e3 // model_params.batch_size),
                                   callbacks=callbacks)
 
     create_submission_file(model, model_params)
@@ -145,7 +150,7 @@ if __name__ == "__main__":
       default="",
       help="Path to training/eval/test data (tf.Example in TFRecord format)")
   parser.add_argument(
-      "--tmp_data",
+      "--tmp_data_path",
       type=str,
       default="",
       help="Path to temp data")
@@ -177,18 +182,8 @@ if __name__ == "__main__":
   parser.add_argument(
       "--batch_norm",
       type="bool",
-      default="False",
+      default="True",
       help="Whether to enable batch normalization or not.")
-  parser.add_argument(
-      "--learning_rate",
-      type=float,
-      default=0.0001,
-      help="Learning rate used for training.")
-  parser.add_argument(
-      "--gradient_clipping_norm",
-      type=float,
-      default=9.0,
-      help="Gradient clipping norm used during training.")
   parser.add_argument(
       "--dropout",
       type=float,
