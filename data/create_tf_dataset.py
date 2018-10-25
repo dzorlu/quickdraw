@@ -18,6 +18,8 @@ from keras.preprocessing import sequence
 
 
 MAX_STROKE_COUNT = 256
+ENCODER_NAME = 'word_encoder.pkl'
+TEST_FILE = 'test_simplified.csv'
 
 
 def to_example(dictionary):
@@ -147,7 +149,7 @@ def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_r
     word_encoder = LabelEncoder()
     word_encoder.fit(full_df['word'])
     # save to file
-    filename = os.path.join(tmp_dir, 'word_encoder.pkl')
+    filename = os.path.join(tmp_dir, ENCODER_NAME)
     joblib.dump(word_encoder, filename)
     full_df['word'] = word_encoder.transform(full_df['word'].values)
     train_df, dev_df = train_test_split(full_df, test_size=1 - train_dev_ratio)
@@ -199,7 +201,8 @@ def main(args):
     generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
     print('dev complete..')
     # test
-    test_path = glob.glob(os.path.join(data_dir, 'test_simplified.csv'))[0]
+    #TODO: NEED THE IDS FROM THE TEST FILES
+    test_path = glob.glob(os.path.join(data_dir, TEST_FILE))[0]
     generator = generate_samples(task, test_path, is_train=False)
     generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)
     print('test complete..')

@@ -1,6 +1,12 @@
 import tensorflow as tf
+import glob
+import os
 
 MAX_STROKE_COUNT = 256
+
+
+def get_filenames(mode):
+    return "quickdraw - {} *".format(mode)
 
 
 def parse(serialized):
@@ -17,16 +23,18 @@ def parse(serialized):
     # pad sequences leads to a fixed size. here we reshape back.
     inputs = tf.reshape(inputs, (MAX_STROKE_COUNT, 3))
     input_shape = parsed_example['input_shape']
-    # The type is now uint8 but we need it to be float.
     # Get the label associated with the image.
     label = parsed_example['targets']
     # The image and label are now correct TensorFlow types.
-    return inputs, input_shape, label
+    return inputs, label
 
 
-def get_iterator(filenames, batch_size):
-    dataset = tf.data.TFRecordDataset(filenames)
+def get_iterator(data_dir, mode, batch_size):
+    filenames = get_filenames(mode)
+    filepaths = glob.glob(os.path.join(data_dir, filenames))
+    dataset = tf.data.TFRecordDataset(filepaths)
     dataset = dataset.map(parse)
     dataset = dataset.batch(batch_size)
+    dataset = dataset.repeat()
     iterator = dataset.make_one_shot_iterator()
     return iterator
