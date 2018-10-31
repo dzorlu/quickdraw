@@ -1,4 +1,5 @@
-# coding=utf-8
+#!/home/deniz/anaconda3/envs/tensorflow_gpuenv/bin/python
+
 import argparse
 import os
 import glob
@@ -18,6 +19,7 @@ from keras.preprocessing import sequence
 
 
 MAX_STROKE_COUNT = 256
+NB_CLASSES = 340
 ENCODER_NAME = 'word_encoder.pkl'
 TEST_FILE = 'test_simplified.csv'
 
@@ -93,16 +95,16 @@ def generate_samples(task, file_path, is_train=True):
     x = df['drawing'].map(_map_fn).values
     if is_train:
         y = df['word'].values
+        print(y)
+
         def _generate_samples():
             for _x, _y in zip(x, y):
                 yield {'targets': [int(_y)],
-                       'inputs': _x.reshape(-1),
-                       'input_shape': [_x.shape[0]]}
+                       'inputs': _x.reshape(-1)}
     else:
         def _generate_samples():
             for _x in x:
-                yield {'inputs': _x.reshape(-1),
-                       'input_shape': [_x.shape[0]]}
+                yield {'inputs': _x.reshape(-1)}
     return _generate_samples()
 
 
@@ -132,7 +134,7 @@ def _stack_it(raw_strokes):
     return c_strokes
 
 
-def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
+def split_data(data_dir, tmp_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
     """
     :param file_path: 
     :param tmp_dir: 
@@ -140,6 +142,7 @@ def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_r
     :param train_dev_ratio: 
     :return: 
     """
+    train_file_paths = glob.glob(os.path.join(data_dir, '*.csv'))
     out_df_list = []
     for c_path in train_file_paths:
         c_df = pd.read_csv(c_path, nrows=nb_samples_for_each_class)
@@ -149,7 +152,7 @@ def split_data(train_file_paths, tmp_dir, nb_samples_for_each_class, train_dev_r
     word_encoder = LabelEncoder()
     word_encoder.fit(full_df['word'])
     # save to file
-    filename = os.path.join(tmp_dir, ENCODER_NAME)
+    filename = os.path.join(data_dir, ENCODER_NAME)
     joblib.dump(word_encoder, filename)
     full_df['word'] = word_encoder.transform(full_df['word'].values)
     train_df, dev_df = train_test_split(full_df, test_size=1 - train_dev_ratio)
@@ -177,7 +180,7 @@ def generate_files(generator, mode, output_dir, nb_shards):
 
 
 def main(args):
-    NB_TRAIN_SHARDS = 20
+    NB_TRAIN_SHARDS = 1
     NB_DEV_SHARDS = 1
     NB_TEST_SHARDS = 5
     args = vars(args)
@@ -187,9 +190,7 @@ def main(args):
     tmp_dir = args.get('tmp_dir')
     sample_class = int(args.get('sample_class'))
     # split the data into train / dev
-    train_file_paths = glob.glob(os.path.join(data_dir, 'train_simplified', '*.csv'))
-    train_path, dev_path = split_data(train_file_paths, tmp_dir, sample_class)
-
+    train_path, dev_path = split_data(data_dir, tmp_dir, sample_class)
     # generate TF Records for train / dev / test
     # train
     print('generating samples..')
@@ -201,7 +202,6 @@ def main(args):
     generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
     print('dev complete..')
     # test
-    #TODO: NEED THE IDS FROM THE TEST FILES
     test_path = glob.glob(os.path.join(data_dir, TEST_FILE))[0]
     generator = generate_samples(task, test_path, is_train=False)
     generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)

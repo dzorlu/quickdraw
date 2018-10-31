@@ -1,4 +1,4 @@
-# coding=utf-8
+#!/home/deniz/anaconda3/envs/tensorflow_gpuenv/bin/python
 import sys
 import os
 
@@ -14,22 +14,16 @@ import numpy as np
 
 import tensorflow as tf
 from sklearn.externals import joblib
-from keras import callbacks
-from keras.models import Sequential
-from keras.layers import BatchNormalization, Conv1D, LSTM, Dense, Dropout
-from keras.layers import CuDNNLSTM as LSTM
-from keras.metrics import top_k_categorical_accuracy
-from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras import callbacks
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import BatchNormalization, Conv1D, LSTM, Dense, Dropout, Input
+from tensorflow.keras.layers import CuDNNLSTM as LSTM
+from tensorflow.keras.metrics import top_k_categorical_accuracy
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
 
 NB_CHANNELS = 3
-
-
-# helper fns
-def _get_num_classes(data_dir):
-    filepath = glob.glob(os.path.join(data_dir, create_tf_dataset.ENCODER_NAME))
-    clf = joblib.load(filepath[0])
-    return len(clf.classes_)
+NB_CLASSES = 340
 
 
 def top_3_accuracy(x, y): return top_k_categorical_accuracy(x, y, 3)
@@ -58,7 +52,7 @@ def model_fn(params):
                 model.add(Dropout(model_params.dropout))
         return model
     model = Sequential()
-    model.add(BatchNormalization(input_shape=(None, params.num_channels)))
+    model.add(BatchNormalization(input_shape=(create_tf_dataset.MAX_STROKE_COUNT, params.num_channels)))
     model = _create_cnn_layers(model, params)
     model = _create_lstm_layers(model, params)
 
@@ -67,10 +61,11 @@ def model_fn(params):
 
 
 def get_callbacks(model_params):
-    weight_path = "{}_weights.best.hdf5".format('stroke_lstm_model')
+    weight_path = "{}/{}_weights.best.hdf5".format(model_params.tmp_data_path, 'stroke_lstm_model')
 
     checkpoint = ModelCheckpoint(weight_path, monitor='val_loss', verbose=1,
-                                 save_best_only=True, mode='min', save_weights_only=True, period=1)
+                                 save_best_only=True, mode='min',
+                                 save_weights_only=True, period=1)
 
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3,
                                   verbose=1, mode='auto', cooldown=3, min_lr=0.001)
@@ -82,8 +77,9 @@ def get_callbacks(model_params):
                                         histogram_freq=0,
                                         batch_size=model_params.batch_size,
                                         write_graph=True, write_grads=False,
-                                        write_images=False, embeddings_freq=0, embeddings_layer_names=None,
-                                        embeddings_metadata=None, embeddings_data=None, update_freq='epoch')
+                                        write_images=False, embeddings_freq=0,
+                                        embeddings_layer_names=None,
+                                        embeddings_metadata=None, embeddings_data=None)
     callbacks_list = [checkpoint, early, reduce_lr, tensorboard]
     return callbacks_list
 
@@ -114,32 +110,35 @@ def main(args):
         batch_size=FLAGS.batch_size,
         nb_conv_filters=ast.literal_eval(FLAGS.nb_conv_filters),
         conv_filter_size=ast.literal_eval(FLAGS.conv_filter_size),
-        num_classes=_get_num_classes(FLAGS.data_path),
+        num_classes=NB_CLASSES,
         num_channels=NB_CHANNELS,
         nb_epochs=FLAGS.nb_epochs,
+        steps_per_epoch=FLAGS.steps,
         batch_norm=FLAGS.batch_norm,
         dropout=FLAGS.dropout)
     model = model_fn(model_params)
 
-    model.compile(optimizer='adam',
-                  loss='categorical_crossentropy',
-                  metrics=['categorical_accuracy', top_3_accuracy])
     tf.logging.info(model.summary())
     callbacks = get_callbacks(model_params)
 
     train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
     eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
-    history = model.fit_generator(generator=train_input_fn,
-                                  validation_data=eval_input_fn,
-                                  validation_steps=200,
-                                  use_multiprocessing=True,
-                                  epochs=model_params.nb_epochs,
-                                  # assuming we have 1MM training samples
-                                  steps_per_epoch=int(1e3 // model_params.batch_size),
-                                  callbacks=callbacks)
+
+    model.compile(optimizer='adam',
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy', top_3_accuracy])
+
+    history = model.fit(train_input_fn,
+                        validation_data=eval_input_fn,
+                        validation_steps=200,
+                        epochs=model_params.nb_epochs,
+                        # assuming we have 1.7MM training samples (340 c lasses x 5000 each class
+                        steps_per_epoch=int(model_params.steps_per_epoch),
+                        callbacks=callbacks)
 
     create_submission_file(model, model_params)
     return history
+
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
@@ -162,7 +161,7 @@ if __name__ == "__main__":
   parser.add_argument(
       "--num_rnn_layers",
       type=int,
-      default=3,
+      default=2,
       help="Number of recurrent neural network layers.")
   parser.add_argument(
       "--num_nodes",
@@ -192,12 +191,12 @@ if __name__ == "__main__":
   parser.add_argument(
       "--steps",
       type=int,
-      default=100000,
-      help="Number of training steps.")
+      default=5000*340,
+      help="Number of training steps per epoch.")
   parser.add_argument(
       "--batch_size",
       type=int,
-      default=8,
+      default=4,
       help="Batch size to use for training/evaluation.")
   parser.add_argument(
       "--model_dir",
@@ -207,7 +206,7 @@ if __name__ == "__main__":
   parser.add_argument(
       "--nb_epochs",
       type=int,
-      default=10,
+      default=5,
       help="number of epochs")
 
   FLAGS, unparsed = parser.parse_known_args()
