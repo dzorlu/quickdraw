@@ -107,6 +107,7 @@ def get_callbacks(model_params):
 
     tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_data_path,
                                         histogram_freq=0,
+                                        batch_size=model_params.batch_size,
                                         write_graph=True, write_grads=False,
                                         write_images=False, embeddings_freq=0,
                                         embeddings_layer_names=None,
@@ -145,6 +146,7 @@ def main(args):
         num_conv_layers=FLAGS.num_conv_layers,
         num_rnn_layers=FLAGS.num_rnn_layers,
         num_nodes=FLAGS.num_nodes,
+        batch_size=FLAGS.batch_size,
         nb_conv_filters=ast.literal_eval(FLAGS.nb_conv_filters),
         conv_filter_size=ast.literal_eval(FLAGS.conv_filter_size),
         num_classes=NB_CLASSES,
@@ -231,6 +233,11 @@ if __name__ == "__main__":
       type=int,
       default=5,
       help="Number of training samples.")
+  parser.add_argument(
+      "--batch_size",
+      type=int,
+      default=64,
+      help="Batch size to use for training/evaluation.")
   parser.add_argument(
       "--model_dir",
       type=str,
