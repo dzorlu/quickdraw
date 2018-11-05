@@ -95,7 +95,6 @@ def generate_samples(task, file_path, is_train=True):
     x = df['drawing'].map(_map_fn).values
     if is_train:
         y = df['word'].values
-        print(y)
 
         def _generate_samples():
             for _x, _y in zip(x, y):
@@ -134,7 +133,7 @@ def _stack_it(raw_strokes):
     return c_strokes
 
 
-def split_data(data_dir, tmp_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
+def split_data(data_dir, tmp_dir, output_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
     """
     :param file_path: 
     :param tmp_dir: 
@@ -148,11 +147,13 @@ def split_data(data_dir, tmp_dir, nb_samples_for_each_class, train_dev_ratio=0.8
         c_df = pd.read_csv(c_path, nrows=nb_samples_for_each_class)
         out_df_list += [c_df[['drawing', 'word']]]
     full_df = pd.concat(out_df_list)
+    print("data has shape {}".format(full_df.shape))
     # cast labels onto integers
     word_encoder = LabelEncoder()
     word_encoder.fit(full_df['word'])
+    print("classes: {}".format(word_encoder.classes_))
     # save to file
-    filename = os.path.join(data_dir, ENCODER_NAME)
+    filename = os.path.join(output_dir, ENCODER_NAME)
     joblib.dump(word_encoder, filename)
     full_df['word'] = word_encoder.transform(full_df['word'].values)
     train_df, dev_df = train_test_split(full_df, test_size=1 - train_dev_ratio)
@@ -186,11 +187,13 @@ def main(args):
     args = vars(args)
     task = args.get('task')
     data_dir = args.get('data_dir')
+    test_dir = args.get('test_dir')
     output_dir = args.get('output_dir')
     tmp_dir = args.get('tmp_dir')
     sample_class = int(args.get('sample_class'))
     # split the data into train / dev
-    train_path, dev_path = split_data(data_dir, tmp_dir, sample_class)
+    train_path, dev_path = split_data(data_dir, tmp_dir, output_dir, sample_class)
+    # generate TF Records for train / dev / test
     # generate TF Records for train / dev / test
     # train
     print('generating samples..')
@@ -202,7 +205,7 @@ def main(args):
     generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
     print('dev complete..')
     # test
-    test_path = glob.glob(os.path.join(data_dir, TEST_FILE))[0]
+    test_path = glob.glob(os.path.join(test_dir, TEST_FILE))[0]
     generator = generate_samples(task, test_path, is_train=False)
     generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)
     print('test complete..')
@@ -212,6 +215,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate TF Records')
     parser.add_argument('--task', help='task name', required=True, choices=['strokes', 'images'])
     parser.add_argument('--data-dir', help='data directory', required=True)
+    parser.add_argument('--test-dir', help='data directory', required=True)
     parser.add_argument('--tmp-dir', help='temp data directory', required=True)
     parser.add_argument('--output-dir', help='output data directory', required=True)
     parser.add_argument('--sample-class', type=int, help='nb samples for each class', required=True)
