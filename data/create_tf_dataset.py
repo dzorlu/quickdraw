@@ -129,11 +129,11 @@ def generate_samples(task, file_path, is_train=True, batch_size=32):
                 ix = batch_size * i, batch_size * (i + 1)
                 batch_x, batch_y = np.stack(x[ix[0]:ix[1]]), np.stack(y[ix[0]:ix[1]])
                 yield (batch_x, batch_y)
+
+        return _generate_samples()
     else:
-        def _generate_samples():
-            for _x in x:
-                yield {'inputs': _x.reshape(-1)}
-    return _generate_samples()
+        return np.stack(x)
+
 
 
 def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
