@@ -47,6 +47,7 @@ def get_iterator(data_dir, mode, batch_size=32):
     dataset = tf.data.TFRecordDataset(filepaths)
     parse = parse_fn(mode)
     dataset = dataset.map(parse)
+    dataset = dataset.shuffle()
     dataset = dataset.batch(batch_size)
     dataset = dataset.repeat()
     return dataset.make_one_shot_iterator()

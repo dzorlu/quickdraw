@@ -16,8 +16,9 @@ import tensorflow as tf
 from sklearn.externals import joblib
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import BatchNormalization, Conv1D, LSTM, Dense, Dropout, Input
-from tensorflow.keras.layers import CuDNNLSTM as LSTM
+from tensorflow.keras.layers import BatchNormalization, Conv1D, Dense, Dropout, Input
+#from tensorflow.keras.layers import CuDNNLSTM as LSTM
+from tensorflow.keras.layers import LSTM
 from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
@@ -51,46 +52,17 @@ def model_fn(params):
             if model_params.dropout:
                 model.add(Dropout(model_params.dropout))
         return model
-    # model = Sequential()
-    # model.add(BatchNormalization(input_shape=(create_tf_dataset.MAX_STROKE_COUNT, params.num_channels)))
-    # model = _create_cnn_layers(model, params)
-    # model = _create_lstm_layers(model, params)
-    # model.add(Dense(512))
-    # model.add(Dropout(params.dropout))
-    # model.add(Dense(params.num_classes, activation='softmax'))
-    # model.compile(optimizer='adam',
-    #               loss='categorical_crossentropy',
-    #               metrics=['categorical_accuracy', top_3_accuracy])    # model = Sequential()
-    # model.add(BatchNormalization(input_shape=(create_tf_dataset.MAX_STROKE_COUNT, params.num_channels)))
-    # model = _create_cnn_layers(model, params)
-    # model = _create_lstm_layers(model, params)
-    # model.add(Dense(512))
-    # model.add(Dropout(params.dropout))
-    # model.add(Dense(params.num_classes, activation='softmax'))
-    # model.compile(optimizer='adam',
-    #               loss='categorical_crossentropy',
-    #               metrics=['categorical_accuracy', top_3_accuracy])
-    stroke_read_model = Sequential()
-    stroke_read_model.add(BatchNormalization(input_shape=(None, 3)))
-    stroke_read_model.add(Conv1D(48, (5,)))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(Conv1D(64, (5,)))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(Conv1D(96, (3,)))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(LSTM(128, return_sequences=True))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(LSTM(128, return_sequences=False))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(Dense(512))
-    stroke_read_model.add(Dropout(0.3))
-    stroke_read_model.add(Dense(340, activation='softmax'))
-    adam = tf.keras.optimizers.Adam(lr=0.01)
-    stroke_read_model.compile(optimizer=adam,
-                              loss='categorical_crossentropy',
-                              metrics=['categorical_accuracy', top_3_accuracy])
-    stroke_read_model.summary()
-    return stroke_read_model
+    model = Sequential()
+    model.add(BatchNormalization(input_shape=(create_tf_dataset.MAX_STROKE_COUNT, params.num_channels)))
+    model = _create_cnn_layers(model, params)
+    model = _create_lstm_layers(model, params)
+    model.add(Dense(512))
+    model.add(Dropout(params.dropout))
+    model.add(Dense(params.num_classes, activation='softmax'))
+    model.compile(optimizer='adam',
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy', top_3_accuracy])
+    return model
 
 
 def get_callbacks(model_params):
@@ -141,7 +113,7 @@ def create_submission_file(model, model_params):
 def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
-        test_path = FLAGS.test_path,
+        test_path=FLAGS.test_path,
         tmp_data_path=FLAGS.tmp_data_path,
         num_conv_layers=FLAGS.num_conv_layers,
         num_rnn_layers=FLAGS.num_rnn_layers,
@@ -161,15 +133,19 @@ def main(args):
     tf.logging.info(model.summary())
     callbacks = get_callbacks(model_params)
 
-    train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
-    eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
+    #train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
+    #eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
+    train_path = os.path.join(model_params.tmp_data_path, 'train.csv')
+    dev_path = os.path.join(model_params.tmp_data_path, 'dev.csv')
+    train_generator = create_tf_dataset.generate_samples('strokes', train_path, model_params.batch_size)
+    eval_generator = create_tf_dataset.generate_samples('strokes', dev_path, model_params.batch_size)
 
-    history = model.fit(train_input_fn,
-                        validation_data=eval_input_fn,
-                        validation_steps=200,
-                        epochs=model_params.nb_epochs,
-                        steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
-                        callbacks=callbacks)
+    history = model.fit_generator(train_generator,
+                                  validation_data=eval_generator,
+                                  validation_steps=200,
+                                  epochs=model_params.nb_epochs,
+                                  steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
+                                  callbacks=callbacks)
 
     create_submission_file(model, model_params)
     return history

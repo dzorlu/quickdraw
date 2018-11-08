@@ -6,6 +6,7 @@ import glob
 import json
 import six
 import cv2
+from itertools import cycle
 from sklearn.externals import joblib
 
 import numpy as np
@@ -16,9 +17,10 @@ from sklearn.preprocessing import LabelEncoder
 import tensorflow as tf
 from tensor2tensor.data_generators import generator_utils
 from keras.preprocessing import sequence
+from keras.utils.np_utils import to_categorical
 
 
-MAX_STROKE_COUNT = 256
+MAX_STROKE_COUNT = 196
 NB_CLASSES = 340
 ENCODER_NAME = 'word_encoder.pkl'
 TEST_FILE = 'test_simplified.csv'
@@ -85,21 +87,48 @@ def _generate_files(generator, output_filenames,
   tf.logging.info("Generated %s Examples", counter)
 
 
-def generate_samples(task, file_path, is_train=True):
+# def generate_samples(task, file_path, is_train=True):
+#     """
+#     load and process the csv files - each csv file contains examples belonging to a class
+#     """
+#     df = pd.read_csv(file_path)
+#     df['drawing'] = [json.loads(draw) for draw in df['drawing'].values]
+#     _map_fn = _stack_it if task == 'strokes' else _draw_it
+#     x = df['drawing'].map(_map_fn).values
+#     if is_train:
+#         y = df['word'].values
+#
+#         def _generate_samples():
+#             for _x, _y in zip(x, y):
+#
+#                 yield {'inputs': _x,
+#                        'targets': to_categorical(int(_y))}
+#     else:
+#         def _generate_samples():
+#             for _x in x:
+#                 yield {'inputs': _x.reshape(-1)}
+#     return _generate_samples()
+
+
+def generate_samples(task, file_path, is_train=True, batch_size=32):
     """
     load and process the csv files - each csv file contains examples belonging to a class
     """
+
     df = pd.read_csv(file_path)
     df['drawing'] = [json.loads(draw) for draw in df['drawing'].values]
     _map_fn = _stack_it if task == 'strokes' else _draw_it
     x = df['drawing'].map(_map_fn).values
+    nb_samples = x.shape[0]
     if is_train:
-        y = df['word'].values
-
+        word_encoder = LabelEncoder()
+        word_encoder.fit(df['word'])
+        y = to_categorical(word_encoder.transform(df['word'].values))
         def _generate_samples():
-            for _x, _y in zip(x, y):
-                yield {'targets': [int(_y)],
-                       'inputs': _x.reshape(-1)}
+            for i in cycle(range(nb_samples // batch_size)):
+                ix = batch_size * i, batch_size * (i + 1)
+                batch_x, batch_y = np.stack(x[ix[0]:ix[1]]), np.stack(y[ix[0]:ix[1]])
+                yield (batch_x, batch_y)
     else:
         def _generate_samples():
             for _x in x:
@@ -128,8 +157,7 @@ def _stack_it(raw_strokes):
     c_strokes[:, 2] += 1
     c_strokes = sequence.\
         pad_sequences(c_strokes.swapaxes(0, 1), maxlen=MAX_STROKE_COUNT, padding='post').\
-        swapaxes(0, 1).\
-        astype(np.int64)
+        swapaxes(0, 1)
     return c_strokes
 
 
@@ -196,19 +224,19 @@ def main(args):
     # generate TF Records for train / dev / test
     # generate TF Records for train / dev / test
     # train
-    print('generating samples..')
-    generator = generate_samples(task, train_path)
-    generate_files(generator, 'train', output_dir, NB_TRAIN_SHARDS)
-    print('training complete..')
-    # dev
-    generator = generate_samples(task, dev_path)
-    generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
-    print('dev complete..')
-    # test
-    test_path = glob.glob(os.path.join(test_dir, TEST_FILE))[0]
-    generator = generate_samples(task, test_path, is_train=False)
-    generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)
-    print('test complete..')
+    # print('generating samples..')
+    # generator = generate_samples(task, train_path)
+    # generate_files(generator, 'train', output_dir, NB_TRAIN_SHARDS)
+    # print('training complete..')
+    # # dev
+    # generator = generate_samples(task, dev_path)
+    # generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
+    # print('dev complete..')
+    # # test
+    # test_path = glob.glob(os.path.join(test_dir, TEST_FILE))[0]
+    # generator = generate_samples(task, test_path, is_train=False)
+    # generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)
+    # print('test complete..')
 
 
 if __name__ == '__main__':
