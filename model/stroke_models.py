@@ -4,7 +4,8 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 
-from data import read_tf_dataset, create_tf_dataset
+from data import create_tf_dataset
+from model import utils
 
 import ast
 import argparse
@@ -12,13 +13,14 @@ import glob
 import pandas as pd
 import numpy as np
 
+import datetime
+
 import tensorflow as tf
 from sklearn.externals import joblib
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import BatchNormalization, Conv1D, Dense, Dropout, Input
-#from tensorflow.keras.layers import CuDNNLSTM as LSTM
-from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import CuDNNLSTM as LSTM
 from tensorflow.keras.metrics import top_k_categorical_accuracy
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
@@ -33,7 +35,7 @@ def top_3_accuracy(x, y): return top_k_categorical_accuracy(x, y, 3)
 def model_fn(params):
     """
     create model function and callbacks given the params
-    :return: 
+    :return:
     """
 
     def _create_cnn_layers(model, model_params):
@@ -84,31 +86,8 @@ def get_callbacks(model_params):
                                         write_images=False, embeddings_freq=0,
                                         embeddings_layer_names=None,
                                         embeddings_metadata=None, embeddings_data=None)
-    #callbacks_list = [checkpoint, reduce_lr, early, tensorboard]
-    callbacks_list = [checkpoint, tensorboard]
-
-    return callbacks_list
-
-
-def create_submission_file(model, model_params):
-    # load the word encoder
-    filepath = glob.glob(os.path.join(model_params.data_path, create_tf_dataset.ENCODER_NAME))
-    encoder = joblib.load(filepath[0])
-    # load the dataframe to write to
-    filepath = glob.glob(os.path.join(model_params.test_path, create_tf_dataset.TEST_FILE))
-    print(filepath)
-    submission = pd.read_csv(filepath[0])
-    # initiate the iterator
-    _iter = read_tf_dataset.Iter(model_params.data_path, 'test', model_params.batch_size)
-    #test_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'test', model_params.batch_size)
-    print(type(_iter))
-    predictions = model.predict_generator(_iter, steps=1)
-
-    predictions = [encoder.inverse_transform[np.argsort(-1 * c_pred)[:3]] for c_pred in predictions]
-    submission['word'] = predictions
-    submission[['key_id', 'word']].to_csv('submission.csv', index=False)
-    print("predictions persisted..")
-
+    callbacks_list = [checkpoint, reduce_lr, early, tensorboard]
+    return callbacks_list, weight_path
 
 def main(args):
     model_params = tf.contrib.training.HParams(
@@ -125,13 +104,14 @@ def main(args):
         num_channels=NB_CHANNELS,
         nb_epochs=FLAGS.nb_epochs,
         nb_samples=FLAGS.nb_samples,
+        nb_eval_samples=FLAGS.nb_eval_samples,
         batch_norm=FLAGS.batch_norm,
         dropout=FLAGS.dropout)
     print(model_params)
     model = model_fn(model_params)
 
     tf.logging.info(model.summary())
-    callbacks = get_callbacks(model_params)
+    callbacks, weight_path = utils.get_callbacks(model_params, 'image')
 
     #train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
     #eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
@@ -142,12 +122,16 @@ def main(args):
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,
-                                  validation_steps=200,
+                                  validation_steps=500,
                                   epochs=model_params.nb_epochs,
                                   steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
                                   callbacks=callbacks)
-
-    create_submission_file(model, model_params)
+    # evaluate
+    model.load_weights(weight_path)
+    eval_res = model.evaluate_generator(eval_generator, steps=model_params.nb_eval_samples // model_params.batch_size)
+    print('Accuracy: %2.1f%%, Top 3 Accuracy %2.1f%%' % (100 * eval_res[1], 100 * eval_res[2]))
+    # submit
+    utils.create_submission_file(model, model_params, 'image')
     return history
 
 
@@ -206,6 +190,11 @@ if __name__ == "__main__":
       help="Dropout used for convolutions and bidi lstm layers.")
   parser.add_argument(
       "--nb_samples",
+      type=int,
+      default=5,
+      help="Number of training samples.")
+  parser.add_argument(
+      "--nb_eval_samples",
       type=int,
       default=5,
       help="Number of training samples.")

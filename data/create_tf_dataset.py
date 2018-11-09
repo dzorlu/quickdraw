@@ -114,26 +114,26 @@ def generate_samples(task, file_path, is_train=True, batch_size=32):
     """
     load and process the csv files - each csv file contains examples belonging to a class
     """
-
+    if task not in ('strokes','image'):
+        ValueError("Task not recognized..")
     df = pd.read_csv(file_path)
     df['drawing'] = [json.loads(draw) for draw in df['drawing'].values]
     _map_fn = _stack_it if task == 'strokes' else _draw_it
     x = df['drawing'].map(_map_fn).values
     nb_samples = x.shape[0]
     if is_train:
-        word_encoder = LabelEncoder()
-        word_encoder.fit(df['word'])
-        y = to_categorical(word_encoder.transform(df['word'].values))
+        y = df['word'].values
+
         def _generate_samples():
             for i in cycle(range(nb_samples // batch_size)):
                 ix = batch_size * i, batch_size * (i + 1)
                 batch_x, batch_y = np.stack(x[ix[0]:ix[1]]), np.stack(y[ix[0]:ix[1]])
+                batch_y = to_categorical(batch_y, num_classes=NB_CLASSES)
                 yield (batch_x, batch_y)
 
         return _generate_samples()
     else:
         return np.stack(x)
-
 
 
 def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
@@ -161,7 +161,7 @@ def _stack_it(raw_strokes):
     return c_strokes
 
 
-def split_data(data_dir, tmp_dir, output_dir, nb_samples_for_each_class, train_dev_ratio=0.8):
+def split_data(data_dir, tmp_dir, output_dir, nb_samples_for_each_class, train_dev_ratio=0.9):
     """
     :param file_path: 
     :param tmp_dir: 
