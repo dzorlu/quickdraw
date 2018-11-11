@@ -111,14 +111,14 @@ def main(args):
     model = model_fn(model_params)
 
     tf.logging.info(model.summary())
-    callbacks, weight_path = utils.get_callbacks(model_params, 'image')
+    callbacks, weight_path = utils.get_callbacks(model_params, 'strokes')
 
     #train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
     #eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
-    train_path = os.path.join(model_params.tmp_data_path, 'train.csv')
-    dev_path = os.path.join(model_params.tmp_data_path, 'dev.csv')
-    train_generator = create_tf_dataset.generate_samples('strokes', train_path, model_params.batch_size)
-    eval_generator = create_tf_dataset.generate_samples('strokes', dev_path, model_params.batch_size)
+    train_path = os.path.join(model_params.tmp_data_path, 'train_strokes.csv')
+    dev_path = os.path.join(model_params.tmp_data_path, 'dev_strokes.csv')
+    train_generator = create_tf_dataset.generate_samples_from_file('strokes', train_path, model_params.batch_size)
+    eval_generator = create_tf_dataset.generate_samples_from_file('strokes', dev_path, model_params.batch_size)
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,

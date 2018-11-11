@@ -85,8 +85,8 @@ def main(args):
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
     train_path = os.path.join(model_params.tmp_data_path, 'train_image.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_image.csv')
-    train_generator = create_tf_dataset.generate_samples('image', train_path, model_params.batch_size)
-    eval_generator = create_tf_dataset.generate_samples('image', dev_path, model_params.batch_size)
+    train_generator = create_tf_dataset.generate_samples_from_file('image', train_path, model_params.batch_size)
+    eval_generator = create_tf_dataset.generate_samples_from_file('image', dev_path, model_params.batch_size)
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,
