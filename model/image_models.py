@@ -2,28 +2,21 @@
 import sys
 import os
 
+
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
 
-from data import create_tf_dataset
+
 from model import utils
 
-import ast
-import argparse
-import glob
-import pandas as pd
-import numpy as np
 
-import datetime
+import argparse
 
 
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras import callbacks
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Dropout, Reshape
 from keras.applications.resnet50 import preprocess_input
-from keras.applications.resnet50 import preprocess_input
 from tensorflow.keras.metrics import top_k_categorical_accuracy
-from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 
 
 NB_CHANNELS = 3
@@ -40,6 +33,7 @@ def model_fn(params):
     """
     if params.input_dim not in [224, 128]:
         ValueError('hip to be square..')
+    #TODO: Preproess input
     base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim, params.input_dim, 3),
                                                            alpha=1.0,
                                                            depth_multiplier=1,
@@ -85,8 +79,8 @@ def main(args):
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
     train_path = os.path.join(model_params.tmp_data_path, 'train_image.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_image.csv')
-    train_generator = create_tf_dataset.generate_samples_from_file('image', train_path, model_params.batch_size)
-    eval_generator = create_tf_dataset.generate_samples_from_file('image', dev_path, model_params.batch_size)
+    train_generator = data.utils.generate_samples_from_file('image', train_path, model_params.batch_size)
+    eval_generator = data.utils.generate_samples_from_file('image', dev_path, model_params.batch_size)
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,

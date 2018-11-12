@@ -9,14 +9,8 @@ from model import utils
 
 import ast
 import argparse
-import glob
-import pandas as pd
-import numpy as np
-
-import datetime
 
 import tensorflow as tf
-from sklearn.externals import joblib
 from tensorflow.keras import callbacks
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import BatchNormalization, Conv1D, Dense, Dropout, Input
@@ -113,12 +107,14 @@ def main(args):
     tf.logging.info(model.summary())
     callbacks, weight_path = utils.get_callbacks(model_params, 'strokes')
 
-    #train_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'train', model_params.batch_size)
-    #eval_input_fn = read_tf_dataset.get_iterator(model_params.data_path, 'dev', model_params.batch_size)
     train_path = os.path.join(model_params.tmp_data_path, 'train_strokes.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_strokes.csv')
-    train_generator = create_tf_dataset.generate_samples_from_file('strokes', train_path, model_params.batch_size)
-    eval_generator = create_tf_dataset.generate_samples_from_file('strokes', dev_path, model_params.batch_size)
+    train_generator = utils.generate_samples_from_file('strokes', train_path,
+                                                       is_train=True,
+                                                       batch_size=model_params.batch_size)
+    eval_generator = utils.generate_samples_from_file('strokes', dev_path,
+                                                      is_train=True,
+                                                      batch_size=model_params.batch_size)
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,

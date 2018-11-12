@@ -3,10 +3,7 @@
 import argparse
 import os
 import glob
-import json
 import six
-import cv2
-from itertools import cycle
 from sklearn.externals import joblib
 
 import numpy as np
@@ -16,8 +13,6 @@ from sklearn.preprocessing import LabelEncoder
 
 import tensorflow as tf
 from tensor2tensor.data_generators import generator_utils
-from keras.preprocessing import sequence
-from keras.utils.np_utils import to_categorical
 
 
 MAX_STROKE_COUNT = 128
@@ -87,102 +82,6 @@ def _generate_files(generator, output_filenames,
   tf.logging.info("Generated %s Examples", counter)
 
 
-# def generate_samples(task, file_path, is_train=True):
-#     """
-#     load and process the csv files - each csv file contains examples belonging to a class
-#     """
-#     df = pd.read_csv(file_path)
-#     df['drawing'] = [json.loads(draw) for draw in df['drawing'].values]
-#     _map_fn = _stack_it if task == 'strokes' else _draw_it
-#     x = df['drawing'].map(_map_fn).values
-#     if is_train:
-#         y = df['word'].values
-#
-#         def _generate_samples():
-#             for _x, _y in zip(x, y):
-#
-#                 yield {'inputs': _x,
-#                        'targets': to_categorical(int(_y))}
-#     else:
-#         def _generate_samples():
-#             for _x in x:
-#                 yield {'inputs': _x.reshape(-1)}
-#     return _generate_samples()
-
-def generate_samples_from_file(task, file_path, is_train=True, batch_size=64):
-    if task not in ('strokes', 'image'):
-        ValueError("Task not recognized..")
-    map_fn = _stack_it if task == 'strokes' else _draw_it
-    print("loading file..")
-    for chunk in pd.read_csv(file_path, chunksize=batch_size):
-        _map_fn = _stack_it if task == 'strokes' else _draw_it
-        chunk['drawing'] = [map_fn(json.loads(draw)) for draw in chunk['drawing'].values]
-        batch_x = np.stack(chunk['drawing'].values)
-        if is_train:
-            batch_y = to_categorical(np.stack(chunk['word'].values), num_classes=NB_CLASSES)
-            yield (batch_x, batch_y)
-        yield batch_x
-
-#
-# def generate_samples(task, file_path, is_train=True, batch_size=32):
-#     """
-#     load and process the csv files - each csv file contains examples belonging to a class
-#     """
-#     if task not in ('strokes','image'):
-#         ValueError("Task not recognized..")
-#     print("loading file..")
-#     df = pd.read_csv(file_path)
-#     print("loading values..")
-#     df['drawing'] = [json.loads(draw) for draw in df['drawing'].values]
-#     _map_fn = _stack_it if task == 'strokes' else _draw_it
-#     print("mapping values..")
-#     x = df['drawing'].map(_map_fn).values
-#     print("mapping done..")
-#     nb_samples = x.shape[0]
-#     if is_train:
-#         y = df['word'].values
-#         del df
-#
-#         def _generate_samples():
-#             for i in cycle(range(nb_samples // batch_size)):
-#                 ix = batch_size * i, batch_size * (i + 1)
-#                 batch_x, batch_y = np.stack(x[ix[0]:ix[1]]), np.stack(y[ix[0]:ix[1]])
-#                 batch_y = to_categorical(batch_y, num_classes=NB_CLASSES)
-#                 yield (batch_x, batch_y)
-#
-#         return _generate_samples()
-#     else:
-#         return np.stack(x)
-
-
-def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
-    img = np.zeros((size, size), np.uint8)
-    for t, stroke in enumerate(raw_strokes):
-        for i in range(len(stroke[0]) - 1):
-            color = 255 - min(t, 10) * 13 if time_color else 255
-            _ = cv2.line(img, (stroke[0][i], stroke[1][i]),
-                         (stroke[0][i + 1], stroke[1][i + 1]), color, lw)
-    return img
-
-
-def _stack_it(raw_strokes):
-    """preprocess the string and make 
-    a standard Nx3 stroke vector"""
-    # unwrap the list
-    in_strokes = [(xi, yi, i) for i, (x, y) in enumerate(raw_strokes) for xi, yi in zip(x, y)]
-    del raw_strokes
-    c_strokes = np.stack(in_strokes)
-    del in_strokes
-
-    # replace stroke id with 1 for continue, 2 for new stroke
-    c_strokes[:, 2] = [1] + np.diff(c_strokes[:,2]).tolist()
-    c_strokes[:, 2] += 1
-    c_strokes = sequence.\
-        pad_sequences(c_strokes.swapaxes(0, 1), maxlen=MAX_STROKE_COUNT, padding='post').\
-        swapaxes(0, 1)
-    return c_strokes
-
-
 def split_data(data_dir, tmp_dir, output_dir, nb_samples_for_each_class, task, train_dev_ratio=0.90):
     """
     :param file_path: 
@@ -231,9 +130,6 @@ def generate_files(generator, mode, output_dir, nb_shards):
 
 
 def main(args):
-    NB_TRAIN_SHARDS = 1
-    NB_DEV_SHARDS = 1
-    NB_TEST_SHARDS = 5
     args = vars(args)
     task = args.get('task')
     data_dir = args.get('data_dir')
@@ -243,22 +139,6 @@ def main(args):
     sample_class = int(args.get('sample_class'))
     # split the data into train / dev
     train_path, dev_path = split_data(data_dir, tmp_dir, output_dir, sample_class, task)
-    # generate TF Records for train / dev / test
-    # generate TF Records for train / dev / test
-    # train
-    # print('generating samples..')
-    # generator = generate_samples(task, train_path)
-    # generate_files(generator, 'train', output_dir, NB_TRAIN_SHARDS)
-    # print('training complete..')
-    # # dev
-    # generator = generate_samples(task, dev_path)
-    # generate_files(generator, 'dev', output_dir, NB_DEV_SHARDS)
-    # print('dev complete..')
-    # # test
-    # test_path = glob.glob(os.path.join(test_dir, TEST_FILE))[0]
-    # generator = generate_samples(task, test_path, is_train=False)
-    # generate_files(generator, 'test', output_dir, NB_TEST_SHARDS)
-    # print('test complete..')
 
 
 if __name__ == '__main__':
