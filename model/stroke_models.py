@@ -127,7 +127,7 @@ def main(args):
     eval_res = model.evaluate_generator(eval_generator, steps=model_params.nb_eval_samples // model_params.batch_size)
     print('Accuracy: %2.1f%%, Top 3 Accuracy %2.1f%%' % (100 * eval_res[1], 100 * eval_res[2]))
     # submit
-    utils.create_submission_file(model, model_params, 'image')
+    utils.create_submission_file(model, model_params, 'stroke')
     return history
 
 
