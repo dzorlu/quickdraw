@@ -13,6 +13,7 @@ import cv2
 import json
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 from tensorflow.keras import callbacks
+from tensorflow.keras.applications.mobilenet import preprocess_input
 import numpy as np
 from tensorflow.keras.preprocessing import sequence
 from tensorflow.keras.utils import to_categorical
@@ -23,7 +24,7 @@ ENCODER_NAME = 'word_encoder.pkl'
 TEST_FILE = 'test_simplified.csv'
 
 
-def _draw_it(raw_strokes, size=256, lw=6, time_color=True):
+def _draw_it(raw_strokes, size=128, lw=6, time_color=True):
     img = np.zeros((size, size), np.uint8)
     for t, stroke in enumerate(raw_strokes):
         for i in range(len(stroke[0]) - 1):
@@ -51,7 +52,7 @@ def _stack_it(raw_strokes):
     return c_strokes
 
 
-def generate_samples_from_file(task, file_path, is_train=True, batch_size=64):
+def generate_samples_from_file(task, file_path, is_train=True, preprocess=False, batch_size=64):
     if task not in ('strokes', 'image'):
         ValueError("Task not recognized..")
     map_fn = _stack_it if task == 'strokes' else _draw_it
@@ -60,10 +61,14 @@ def generate_samples_from_file(task, file_path, is_train=True, batch_size=64):
             _map_fn = _stack_it if task == 'strokes' else _draw_it
             chunk['drawing'] = [map_fn(json.loads(draw)) for draw in chunk['drawing'].values]
             batch_x = np.stack(chunk['drawing'].values)
+            # TODO: pass the preprocessing as a function that encapsulates input_shape
+            if preprocess:
+                batch_x = preprocess_input(batch_x).astype(np.float32)
+                batch_x = np.repeat(batch_x, 3).reshape(batch_size, 128, 128, 3)
             if is_train:
                 batch_y = to_categorical(np.stack(chunk['word'].values), num_classes=NB_CLASSES)
                 yield (batch_x, batch_y)
-            yield batch_x
+        #TODO: test run needs to be removed!
 
 
 def create_submission_file(model, model_params, model_type):

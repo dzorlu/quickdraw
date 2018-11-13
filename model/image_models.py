@@ -14,8 +14,8 @@ import argparse
 
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Activation, Conv2D, Dense, Dropout, Reshape
-from keras.applications.resnet50 import preprocess_input
+from tensorflow.keras.layers import DepthwiseConv2D, Activation, Conv2D, \
+    BatchNormalization, Reshape, ReLU, AveragePooling2D
 from tensorflow.keras.metrics import top_k_categorical_accuracy
 
 
@@ -33,8 +33,9 @@ def model_fn(params):
     """
     if params.input_dim not in [224, 128]:
         ValueError('hip to be square..')
-    #TODO: Preproess input
-    base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim, params.input_dim, 3),
+
+    base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim,
+                                                                        params.input_dim, 3),
                                                            alpha=1.0,
                                                            depth_multiplier=1,
                                                            dropout=params.dropout,
@@ -46,9 +47,21 @@ def model_fn(params):
     #Freeze lower layers
     for layer in base_model.layers:
         layer.trainable = False
-    x = Reshape((1, 1, 1024), name='reshape_1')(x)
-    x = Dropout(params.dropout, name='dropout')(x)
-    x = Conv2D(params.num_classes, kernel_size=(1,1), padding='same', name='conv_1')(x)
+    x = DepthwiseConv2D((3, 3),
+                        padding='same',
+                        strides=(2, 2),
+                        use_bias=False,
+                        name='conv_dw_14')(x)
+    x = BatchNormalization(name='conv_dw_14_bn')(x)
+    x = ReLU(6., name='conv_dw_14_relu')(x)
+    x = Conv2D(512, (1, 1),
+               padding='same',
+               use_bias=False,
+               strides=(1, 1),
+               name='conv_pw_14')(x)
+    x = BatchNormalization(name='conv_pw_14_bn')(x)
+    x = AveragePooling2D()(x)
+    x = Conv2D(params.num_classes, kernel_size=(1, 1), padding='same', name='conv_15')(x)
     x = Activation('softmax', name='act_softmax')(x)
     x = Reshape((params.num_classes,), name='reshape_2')(x)
     model = Model(inputs=base_model.input, outputs=x)
@@ -63,7 +76,7 @@ def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
         test_path=FLAGS.test_path,
-        tmp_data_path=FLAGS.tmp_. data_path,
+        tmp_data_path=FLAGS.tmp_data_path,
         batch_size=FLAGS.batch_size,
         num_classes=NB_CLASSES,
         num_channels=NB_CHANNELS,
@@ -77,11 +90,15 @@ def main(args):
 
     tf.logging.info(model.summary())
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
-    train_path = os.path.join(model_params.tmp_data_path, 'train_image.csv')
-    dev_path = os.path.join(model_params.tmp_data_path, 'dev_image.csv')
-    train_generator = utils.generate_samples_from_file('image', train_path, is_train=True,
+    train_path = os.path.join(model_params.tmp_data_path, 'train_images.csv')
+    dev_path = os.path.join(model_params.tmp_data_path, 'dev_images.csv')
+    train_generator = utils.generate_samples_from_file('image', train_path,
+                                                       is_train=True,
+                                                       preprocess=True,
                                                        batch_size=model_params.batch_size)
-    eval_generator = utils.generate_samples_from_file('image', dev_path, is_train=True,
+    eval_generator = utils.generate_samples_from_file('image', dev_path,
+                                                      preprocess=True,
+                                                      is_train=True,
                                                       batch_size=model_params.batch_size)
 
     history = model.fit_generator(train_generator,
@@ -122,6 +139,11 @@ if __name__ == "__main__":
       type=float,
       default=0.3,
       help="Dropout used for convolutions and bidi lstm layers.")
+  parser.add_argument(
+      "--input_dim",
+      type=int,
+      default=128,
+      help="Number of training samples.")
   parser.add_argument(
       "--nb_samples",
       type=int,

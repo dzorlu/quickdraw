@@ -130,6 +130,7 @@ def main(args):
     utils.create_submission_file(model, model_params, 'strokes')
     return history
 
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.register("type", "bool", lambda v: v.lower() == "true")
