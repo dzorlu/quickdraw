@@ -63,7 +63,7 @@ def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
         test_path=FLAGS.test_path,
-        tmp_data_path=FLAGS.tmp_data_path,
+        tmp_data_path=FLAGS.tmp_. data_path,
         batch_size=FLAGS.batch_size,
         num_classes=NB_CLASSES,
         num_channels=NB_CHANNELS,

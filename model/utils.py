@@ -63,6 +63,7 @@ def generate_samples_from_file(task, file_path, is_train=True, batch_size=64):
             if is_train:
                 batch_y = to_categorical(np.stack(chunk['word'].values), num_classes=NB_CLASSES)
                 yield (batch_x, batch_y)
+            yield batch_x
 
 
 def create_submission_file(model, model_params, model_type):
@@ -74,7 +75,7 @@ def create_submission_file(model, model_params, model_type):
     filepath = glob.glob(os.path.join(model_params.test_path, TEST_FILE))[0]
     submission = pd.read_csv(filepath)
     test_data = generate_samples_from_file(model_type, filepath, is_train=False)
-    predictions = model.predict_generator(test_data)
+    predictions = model.predict_generator(test_data, steps=(112200 // model_params.batch_size)+1)
     predictions = [encoder.inverse_transform(np.argsort(-1 * c_pred)[:3]) for c_pred in predictions]
     predictions = [' '.join([col.replace(' ', '_') for col in row]) for row in predictions]
     submission['word'] = predictions
@@ -94,7 +95,7 @@ def get_callbacks(model_params, model_type):
                                   verbose=1, mode='auto', cooldown=2, min_lr=1e-4)
     early = EarlyStopping(monitor="val_loss",
                           mode="min",
-                          patience=10)
+                          patience=6)
 
     tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_data_path,
                                         histogram_freq=0,
