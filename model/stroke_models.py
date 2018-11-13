@@ -107,29 +107,28 @@ def main(args):
     tf.logging.info(model.summary())
     callbacks, weight_path = utils.get_callbacks(model_params, 'strokes')
 
-    # train_path = os.path.join(model_params.tmp_data_path, 'train_strokes.csv')
-    # dev_path = os.path.join(model_params.tmp_data_path, 'dev_strokes.csv')
-    # train_generator = utils.generate_samples_from_file('strokes', train_path,
-    #                                                    is_train=True,
-    #                                                    batch_size=model_params.batch_size)
-    # eval_generator = utils.generate_samples_from_file('strokes', dev_path,
-    #                                                   is_train=True,
-    #                                                   batch_size=model_params.batch_size)
-    #
-    # history = model.fit_generator(train_generator,
-    #                               validation_data=eval_generator,
-    #                               validation_steps=500,
-    #                               epochs=model_params.nb_epochs,
-    #                               steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
-    #                               callbacks=callbacks)
+    train_path = os.path.join(model_params.tmp_data_path, 'train_strokes.csv')
+    dev_path = os.path.join(model_params.tmp_data_path, 'dev_strokes.csv')
+    train_generator = utils.generate_samples_from_file('strokes', train_path,
+                                                       is_train=True,
+                                                       batch_size=model_params.batch_size)
+    eval_generator = utils.generate_samples_from_file('strokes', dev_path,
+                                                      is_train=True,
+                                                      batch_size=model_params.batch_size)
+
+    history = model.fit_generator(train_generator,
+                                  validation_data=eval_generator,
+                                  validation_steps=500,
+                                  epochs=model_params.nb_epochs,
+                                  steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
+                                  callbacks=callbacks)
     # evaluate
     model.load_weights(weight_path)
-    # eval_res = model.evaluate_generator(eval_generator, steps=model_params.nb_eval_samples // model_params.batch_size)
-    # print('Accuracy: %2.1f%%, Top 3 Accuracy %2.1f%%' % (100 * eval_res[1], 100 * eval_res[2]))
+    eval_res = model.evaluate_generator(eval_generator, steps=model_params.nb_eval_samples // model_params.batch_size)
+    print('Accuracy: %2.1f%%, Top 3 Accuracy %2.1f%%' % (100 * eval_res[1], 100 * eval_res[2]))
     # submit
     utils.create_submission_file(model, model_params, 'strokes')
-    return []
-
+    return history
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()

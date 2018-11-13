@@ -79,8 +79,10 @@ def main(args):
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
     train_path = os.path.join(model_params.tmp_data_path, 'train_image.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_image.csv')
-    train_generator = data.utils.generate_samples_from_file('image', train_path, model_params.batch_size)
-    eval_generator = data.utils.generate_samples_from_file('image', dev_path, model_params.batch_size)
+    train_generator = utils.generate_samples_from_file('image', train_path, is_train=True,
+                                                       batch_size=model_params.batch_size)
+    eval_generator = utils.generate_samples_from_file('image', dev_path, is_train=True,
+                                                      batch_size=model_params.batch_size)
 
     history = model.fit_generator(train_generator,
                                   validation_data=eval_generator,
