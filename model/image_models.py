@@ -14,6 +14,7 @@ import argparse
 
 import tensorflow as tf
 from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import DepthwiseConv2D, Activation, Conv2D, \
     BatchNormalization, Reshape, ReLU, AveragePooling2D
 from tensorflow.keras.metrics import top_k_categorical_accuracy
@@ -45,8 +46,10 @@ def model_fn(params):
                                                            pooling=None)
     x = base_model.output
     #Freeze lower layers
-    for layer in base_model.layers:
-        layer.trainable = False
+    nb_layers_to_freeze = len(base_model.layers) - 5
+    for i, layer in enumerate(base_model.layers):
+        if i < nb_layers_to_freeze:
+            layer.trainable = False
     x = DepthwiseConv2D((3, 3),
                         padding='same',
                         strides=(2, 2),
@@ -65,8 +68,8 @@ def model_fn(params):
     x = Activation('softmax', name='act_softmax')(x)
     x = Reshape((params.num_classes,), name='reshape_2')(x)
     model = Model(inputs=base_model.input, outputs=x)
-
-    model.compile(optimizer='adam',
+    Adam(lr=2e-4)
+    model.compile(optimizer=Adam(lr=2e-4),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy', top_3_accuracy])
     return model

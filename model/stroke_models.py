@@ -83,6 +83,7 @@ def get_callbacks(model_params):
     callbacks_list = [checkpoint, reduce_lr, early, tensorboard]
     return callbacks_list, weight_path
 
+
 def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
