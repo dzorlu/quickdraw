@@ -95,12 +95,14 @@ def main(args):
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
     train_path = os.path.join(model_params.tmp_data_path, 'train_images.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_images.csv')
+    preprocess_fn = utils.preprocess_fn(input_shape=model_params.input_shape,
+                                        repeat_channels=True)
     train_generator = utils.generate_samples_from_file('image', train_path,
                                                        is_train=True,
-                                                       preprocess=True,
+                                                       preprocess_fn=preprocess_fn,
                                                        batch_size=model_params.batch_size)
     eval_generator = utils.generate_samples_from_file('image', dev_path,
-                                                      preprocess=True,
+                                                      preprocess_fn=preprocess_fn,
                                                       is_train=True,
                                                       batch_size=model_params.batch_size)
 

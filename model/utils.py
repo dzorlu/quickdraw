@@ -19,13 +19,14 @@ from tensorflow.keras.preprocessing import sequence
 from tensorflow.keras.utils import to_categorical
 
 MAX_STROKE_COUNT = 128
+BASE_SIZE = 256
 NB_CLASSES = 340
 ENCODER_NAME = 'word_encoder.pkl'
 TEST_FILE = 'test_simplified.csv'
 
 
-def _draw_it(raw_strokes, size=128, lw=6, time_color=True):
-    img = np.zeros((size, size), np.uint8)
+def _draw_it(raw_strokes, lw=6, time_color=True):
+    img = np.zeros((BASE_SIZE, BASE_SIZE), np.uint8)
     for t, stroke in enumerate(raw_strokes):
         for i in range(len(stroke[0]) - 1):
             color = 255 - min(t, 10) * 13 if time_color else 255
@@ -52,23 +53,31 @@ def _stack_it(raw_strokes):
     return c_strokes
 
 
-def generate_samples_from_file(task, file_path, is_train=True, preprocess=False, batch_size=64):
+def preprocess_fn(input_shape, repeat_channels=True):
+    def _preprocess_fn(_x):
+        _x = preprocess_input(_x).astype(np.float32)
+        if repeat_channels:
+            _x = np.repeat(_x, 3).reshape(input_shape[0], input_shape[1], 3)
+        return _x
+    return _preprocess_fn
+
+
+def generate_samples_from_file(task, file_path, is_train=True, preprocess_fn=None, batch_size=64):
     if task not in ('strokes', 'image'):
         ValueError("Task not recognized..")
     map_fn = _stack_it if task == 'strokes' else _draw_it
     while True:
         for chunk in pd.read_csv(file_path, chunksize=batch_size):
-            _map_fn = _stack_it if task == 'strokes' else _draw_it
             chunk['drawing'] = [map_fn(json.loads(draw)) for draw in chunk['drawing'].values]
-            batch_x = np.stack(chunk['drawing'].values)
-            # TODO: pass the preprocessing as a function that encapsulates input_shape
-            if preprocess:
-                batch_x = preprocess_input(batch_x).astype(np.float32)
-                batch_x = np.repeat(batch_x, 3).reshape(batch_size, 128, 128, 3)
+            if preprocess_fn:
+                _vals = chunk['drawing'].apply(preprocess_fn).values
+            else:
+                _vals = chunk['drawing'].values
+            batch_x = np.stack(_vals)
             if is_train:
                 batch_y = to_categorical(np.stack(chunk['word'].values), num_classes=NB_CLASSES)
                 yield (batch_x, batch_y)
-        #TODO: test run needs to be removed!
+        #TODO: test run needed to be removed!
 
 
 def create_submission_file(model, model_params, model_type):
@@ -79,7 +88,8 @@ def create_submission_file(model, model_params, model_type):
     # load the dataframe to write to
     filepath = glob.glob(os.path.join(model_params.test_path, TEST_FILE))[0]
     submission = pd.read_csv(filepath)
-    test_data = generate_samples_from_file(model_type, filepath, is_train=False)
+    _preprocess_fn = preprocess_fn(model_params.input_shape, repeat_channels=True)
+    test_data = generate_samples_from_file(model_type, filepath, preprocess_fn=_preprocess_fn, is_train=False)
     predictions = model.predict_generator(test_data, steps=(112200 // model_params.batch_size)+1)
     predictions = [encoder.inverse_transform(np.argsort(-1 * c_pred)[:3]) for c_pred in predictions]
     predictions = [' '.join([col.replace(' ', '_') for col in row]) for row in predictions]
