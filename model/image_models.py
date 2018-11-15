@@ -46,7 +46,7 @@ def model_fn(params):
                                                            pooling=None)
     x = base_model.output
     #Freeze lower layers
-    nb_layers_to_freeze = len(base_model.layers) - 5
+    nb_layers_to_freeze = len(base_model.layers)
     for i, layer in enumerate(base_model.layers):
         if i < nb_layers_to_freeze:
             layer.trainable = False
@@ -68,8 +68,7 @@ def model_fn(params):
     x = Activation('softmax', name='act_softmax')(x)
     x = Reshape((params.num_classes,), name='reshape_2')(x)
     model = Model(inputs=base_model.input, outputs=x)
-    Adam(lr=2e-4)
-    model.compile(optimizer=Adam(lr=2e-4),
+    model.compile(optimizer=Adam(lr=1e-3),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy', top_3_accuracy])
     return model
@@ -95,7 +94,7 @@ def main(args):
     callbacks, weight_path = utils.get_callbacks(model_params, 'image')
     train_path = os.path.join(model_params.tmp_data_path, 'train_images.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_images.csv')
-    preprocess_fn = utils.preprocess_fn(input_shape=model_params.input_shape,
+    preprocess_fn = utils.preprocess_fn(input_shape=model_params.input_dim,
                                         repeat_channels=True)
     train_generator = utils.generate_samples_from_file('image', train_path,
                                                        is_train=True,
@@ -162,7 +161,7 @@ if __name__ == "__main__":
   parser.add_argument(
       "--batch_size",
       type=int,
-      default=64,
+      default=128,
       help="Batch size to use for training/evaluation.")
   parser.add_argument(
       "--model_dir",
