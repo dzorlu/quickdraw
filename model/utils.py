@@ -55,9 +55,10 @@ def _stack_it(raw_strokes):
 
 def preprocess_fn(input_shape, repeat_channels=True):
     def _preprocess_fn(_x):
+        _x = cv2.resize(_x, (input_shape, input_shape))
         _x = preprocess_input(_x).astype(np.float32)
         if repeat_channels:
-            _x = np.repeat(_x, 3).reshape(input_shape[0], input_shape[1], 3)
+            _x = np.repeat(_x, 3).reshape(input_shape, input_shape, 3)
         return _x
     return _preprocess_fn
 
