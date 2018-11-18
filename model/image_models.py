@@ -36,42 +36,42 @@ def model_fn(params):
         ValueError('hip to be square..')
 
     base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim,
-                                                                        params.input_dim, 3),
+                                                                        params.input_dim, 1),
                                                            alpha=1.0,
                                                            depth_multiplier=1,
                                                            dropout=params.dropout,
-                                                           include_top=False,
-                                                           weights='imagenet',
+                                                           include_top=True,
+                                                           weights=None,
+                                                           classes=NB_CLASSES,
                                                            input_tensor=None,
                                                            pooling=None)
-    x = base_model.output
-    #Freeze lower layers
-    nb_layers_to_freeze = len(base_model.layers)
-    for i, layer in enumerate(base_model.layers):
-        if i < nb_layers_to_freeze:
-            layer.trainable = False
-    x = DepthwiseConv2D((3, 3),
-                        padding='same',
-                        strides=(2, 2),
-                        use_bias=False,
-                        name='conv_dw_14')(x)
-    x = BatchNormalization(name='conv_dw_14_bn')(x)
-    x = ReLU(6., name='conv_dw_14_relu')(x)
-    x = Conv2D(512, (1, 1),
-               padding='same',
-               use_bias=False,
-               strides=(1, 1),
-               name='conv_pw_14')(x)
-    x = BatchNormalization(name='conv_pw_14_bn')(x)
-    x = AveragePooling2D()(x)
-    x = Conv2D(params.num_classes, kernel_size=(1, 1), padding='same', name='conv_15')(x)
-    x = Activation('softmax', name='act_softmax')(x)
-    x = Reshape((params.num_classes,), name='reshape_2')(x)
-    model = Model(inputs=base_model.input, outputs=x)
-    model.compile(optimizer=Adam(lr=1e-3),
-                  loss='categorical_crossentropy',
-                  metrics=['categorical_accuracy', top_3_accuracy])
-    return model
+    # x = base_model.output
+    # #Freeze lower layers
+    # #nb_layers_to_freeze = len(base_model.layers)
+    # # for i, layer in enumerate(base_model.layers):
+    # #     layer.trainable = True
+    # x = DepthwiseConv2D((3, 3),
+    #                     padding='same',
+    #                     strides=(2, 2),
+    #                     use_bias=False,
+    #                     name='conv_dw_14')(x)
+    # x = BatchNormalization(name='conv_dw_14_bn')(x)
+    # x = ReLU(6., name='conv_dw_14_relu')(x)
+    # x = Conv2D(128, (1, 1),
+    #            padding='same',
+    #            use_bias=False,
+    #            strides=(1, 1),
+    #            name='conv_pw_14')(x)
+    # x = BatchNormalization(name='conv_pw_14_bn')(x)
+    # x = AveragePooling2D()(x)
+    # x = Conv2D(params.num_classes, kernel_size=(1, 1), padding='same', name='conv_15')(x)
+    # x = Activation('softmax', name='act_softmax')(x)
+    # x = Reshape((params.num_classes,), name='reshape_2')(x)
+    # model = Model(inputs=base_model.input, outputs=x)
+    base_model.compile(optimizer=Adam(lr=2e-3),
+                       loss='categorical_crossentropy',
+                       metrics=['categorical_accuracy', top_3_accuracy])
+    return base_model
 
 
 def main(args):
@@ -95,7 +95,7 @@ def main(args):
     train_path = os.path.join(model_params.tmp_data_path, 'train_images.csv')
     dev_path = os.path.join(model_params.tmp_data_path, 'dev_images.csv')
     preprocess_fn = utils.preprocess_fn(input_shape=model_params.input_dim,
-                                        repeat_channels=True)
+                                        repeat_channels=False)
     train_generator = utils.generate_samples_from_file('image', train_path,
                                                        is_train=True,
                                                        preprocess_fn=preprocess_fn,
@@ -117,7 +117,6 @@ def main(args):
     print('Accuracy: %2.1f%%, Top 3 Accuracy %2.1f%%' % (100 * eval_res[1], 100 * eval_res[2]))
     # submit
     utils.create_submission_file(model, model_params, 'image')
-    return history
 
 
 if __name__ == "__main__":
@@ -161,7 +160,7 @@ if __name__ == "__main__":
   parser.add_argument(
       "--batch_size",
       type=int,
-      default=128,
+      default=64,
       help="Batch size to use for training/evaluation.")
   parser.add_argument(
       "--model_dir",

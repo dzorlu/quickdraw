@@ -56,9 +56,10 @@ def _stack_it(raw_strokes):
 def preprocess_fn(input_shape, repeat_channels=True):
     def _preprocess_fn(_x):
         _x = cv2.resize(_x, (input_shape, input_shape))
-        _x = preprocess_input(_x).astype(np.float32)
         if repeat_channels:
             _x = np.repeat(_x, 3).reshape(input_shape, input_shape, 3)
+        else:
+            _x = np.expand_dims(_x, -1)
         return _x
     return _preprocess_fn
 
@@ -75,10 +76,13 @@ def generate_samples_from_file(task, file_path, is_train=True, preprocess_fn=Non
             else:
                 _vals = chunk['drawing'].values
             batch_x = np.stack(_vals)
+            if preprocess_fn:
+                batch_x = preprocess_input(batch_x).astype(np.float32)
             if is_train:
                 batch_y = to_categorical(np.stack(chunk['word'].values), num_classes=NB_CLASSES)
                 yield (batch_x, batch_y)
-        #TODO: test run needed to be removed!
+            else:
+                yield batch_x
 
 
 def create_submission_file(model, model_params, model_type):
@@ -89,8 +93,8 @@ def create_submission_file(model, model_params, model_type):
     # load the dataframe to write to
     filepath = glob.glob(os.path.join(model_params.test_path, TEST_FILE))[0]
     submission = pd.read_csv(filepath)
-    _preprocess_fn = preprocess_fn(model_params.input_shape, repeat_channels=True)
-    test_data = generate_samples_from_file(model_type, filepath, preprocess_fn=_preprocess_fn, is_train=False)
+    _preprocess_fn = preprocess_fn(model_params.input_dim, repeat_channels=False)
+    test_data = generate_samples_from_file(model_type, filepath, preprocess_fn=_preprocess_fn, is_train=False, batch_size=model_params.batch_size)
     predictions = model.predict_generator(test_data, steps=(112200 // model_params.batch_size)+1)
     predictions = [encoder.inverse_transform(np.argsort(-1 * c_pred)[:3]) for c_pred in predictions]
     predictions = [' '.join([col.replace(' ', '_') for col in row]) for row in predictions]
@@ -107,11 +111,11 @@ def get_callbacks(model_params, model_type):
     checkpoint = ModelCheckpoint(weight_path, monitor='val_loss', verbose=1,
                                  save_best_only=True, mode='min', period=1)
 
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2,
-                                  verbose=1, mode='auto', cooldown=2, min_lr=1e-4)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=1,
+                                  verbose=1, mode='auto', cooldown=1, min_lr=5e-5)
     early = EarlyStopping(monitor="val_loss",
                           mode="min",
-                          patience=6)
+                          patience=5)
 
     tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_data_path,
                                         histogram_freq=0,
