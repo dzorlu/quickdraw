@@ -5,6 +5,7 @@ import sys
 
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../'))
+from model.callbacks import LearningRateRangeTest, CosineLearninRatePolicy
 import datetime
 from sklearn.externals import joblib
 import pandas as pd
@@ -111,11 +112,9 @@ def get_callbacks(model_params, model_type):
     checkpoint = ModelCheckpoint(weight_path, monitor='val_loss', verbose=1,
                                  save_best_only=True, mode='min', period=1)
 
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=1,
-                                  verbose=1, mode='auto', cooldown=1, min_lr=5e-5)
     early = EarlyStopping(monitor="val_loss",
                           mode="min",
-                          patience=5)
+                          patience=2)
 
     tensorboard = callbacks.TensorBoard(log_dir=model_params.tmp_data_path,
                                         histogram_freq=0,
@@ -124,5 +123,16 @@ def get_callbacks(model_params, model_type):
                                         write_images=False, embeddings_freq=0,
                                         embeddings_layer_names=None,
                                         embeddings_metadata=None, embeddings_data=None)
-    callbacks_list = [checkpoint, reduce_lr, early, tensorboard]
+    if model_params.lr_policy == 'range_test':
+        lr_policy = LearningRateRangeTest(total_nb_steps=int(model_params.nb_samples) // model_params.batch_size)
+    elif model_params.lr_policy == 'cosine_rate_policy':
+        lr_policy = CosineLearninRatePolicy(nb_steps_per_epoch=int(model_params.nb_samples) // model_params.batch_size,
+                                        max_rate=3e-3)
+    else:
+        lr_policy = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=1,
+                                      verbose=1, mode='auto', cooldown=1, min_lr=1e-4)
+    callbacks_list = [checkpoint, early]
+    callbacks_list += [lr_policy]
+    callbacks_list += [tensorboard]
+
     return callbacks_list, weight_path

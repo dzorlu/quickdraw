@@ -34,41 +34,23 @@ def model_fn(params):
     """
     if params.input_dim not in [224, 128]:
         ValueError('hip to be square..')
-
-    base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim,
-                                                                        params.input_dim, 1),
-                                                           alpha=1.0,
-                                                           depth_multiplier=1,
-                                                           dropout=params.dropout,
-                                                           include_top=True,
-                                                           weights=None,
-                                                           classes=NB_CLASSES,
-                                                           input_tensor=None,
-                                                           pooling=None)
-    # x = base_model.output
-    # #Freeze lower layers
-    # #nb_layers_to_freeze = len(base_model.layers)
-    # # for i, layer in enumerate(base_model.layers):
-    # #     layer.trainable = True
-    # x = DepthwiseConv2D((3, 3),
-    #                     padding='same',
-    #                     strides=(2, 2),
-    #                     use_bias=False,
-    #                     name='conv_dw_14')(x)
-    # x = BatchNormalization(name='conv_dw_14_bn')(x)
-    # x = ReLU(6., name='conv_dw_14_relu')(x)
-    # x = Conv2D(128, (1, 1),
-    #            padding='same',
-    #            use_bias=False,
-    #            strides=(1, 1),
-    #            name='conv_pw_14')(x)
-    # x = BatchNormalization(name='conv_pw_14_bn')(x)
-    # x = AveragePooling2D()(x)
-    # x = Conv2D(params.num_classes, kernel_size=(1, 1), padding='same', name='conv_15')(x)
-    # x = Activation('softmax', name='act_softmax')(x)
-    # x = Reshape((params.num_classes,), name='reshape_2')(x)
-    # model = Model(inputs=base_model.input, outputs=x)
-    base_model.compile(optimizer=Adam(lr=2e-3),
+    if params.model == 'mobilenet':
+        base_model = tf.keras.applications.mobilenet.MobileNet(input_shape=(params.input_dim, params.input_dim, 1),
+                                                               alpha=1.0,
+                                                               depth_multiplier=1,
+                                                               dropout=params.dropout,
+                                                               include_top=True,
+                                                               weights=None,
+                                                               classes=NB_CLASSES,
+                                                               input_tensor=None,
+                                                               pooling=None)
+    else:
+        base_model = tf.keras.applications.resnet50.ResNet50(input_shape=(params.input_dim,
+                                                                          params.input_dim, 1),
+                                                             include_top=True,
+                                                             weights=None,
+                                                             classes=NB_CLASSES)
+    base_model.compile(optimizer=Adam(lr=1e-2),
                        loss='categorical_crossentropy',
                        metrics=['categorical_accuracy', top_3_accuracy])
     return base_model
@@ -78,6 +60,7 @@ def main(args):
     model_params = tf.contrib.training.HParams(
         data_path=FLAGS.data_path,
         test_path=FLAGS.test_path,
+        model=FLAGS.model,
         tmp_data_path=FLAGS.tmp_data_path,
         batch_size=FLAGS.batch_size,
         num_classes=NB_CLASSES,
@@ -168,10 +151,21 @@ if __name__ == "__main__":
       default="",
       help="Path for storing the model checkpoints.")
   parser.add_argument(
+      "--model",
+      type=str,
+      default="resnet",
+      help="Model architechture.")
+  parser.add_argument(
       "--nb_epochs",
       type=int,
       default=50,
       help="number of epochs")
+  parser.add_argument(
+      "--lr_policy",
+      choices=['cosine_rate_policy','range_test','reduce'],
+      type=str,
+      default='cosine_rate_policy',
+      help="lr policy")
 
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
